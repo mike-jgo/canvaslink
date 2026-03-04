@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Canvas Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #030712; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+
+    .cal-chip {
+      font-size: 0.6rem;
+      line-height: 1rem;
+      padding: 0 4px;
+      border-radius: 3px;
+      cursor: default;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+
+    #calGrid > div:nth-child(7n) { border-right: none; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 text-white font-sans">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-10 bg-gray-950/90 backdrop-blur border-b border-gray-800">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Canvas Dashboard</h1>
+        <p class="text-xs text-gray-500 mt-0.5">
+          Next {{ upcoming_days }} days of assignments &bull; Last {{ announcement_days }} days of announcements
+        </p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="ts" class="text-xs text-gray-500 hidden"></span>
+        <a href="/logout" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-medium transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Sign out
+        </a>
+        <button
+          id="refreshBtn"
+          onclick="fetchData()"
+          class="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+        >
+          <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- ── Error banner ──────────────────────────────────────────────────── -->
+    <div id="errorBanner" class="hidden rounded-xl border border-red-700 bg-red-950/60 px-5 py-4">
+      <p class="font-semibold text-red-400">Error loading data</p>
+      <p id="errorMsg" class="text-sm text-red-300 mt-1"></p>
+    </div>
+
+    <!-- ── Loading skeleton ──────────────────────────────────────────────── -->
+    <div id="skeleton" class="space-y-8">
+      <div class="animate-pulse grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="h-20 bg-gray-800 rounded-xl"></div>
+        <div class="h-20 bg-gray-800 rounded-xl"></div>
+        <div class="h-20 bg-gray-800 rounded-xl"></div>
+        <div class="h-20 bg-gray-800 rounded-xl"></div>
+      </div>
+      <div class="animate-pulse flex gap-2">
+        <div class="h-8 w-28 bg-gray-800 rounded-full"></div>
+        <div class="h-8 w-24 bg-gray-800 rounded-full"></div>
+        <div class="h-8 w-24 bg-gray-800 rounded-full"></div>
+      </div>
+      <div class="animate-pulse grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 h-96 bg-gray-800 rounded-xl"></div>
+        <div class="h-96 bg-gray-800 rounded-xl"></div>
+      </div>
+    </div>
+
+    <!-- ── Dashboard content ─────────────────────────────────────────────── -->
+    <div id="dashboard" class="hidden space-y-8">
+
+      <!-- Daily Summary -->
+      <section>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="summaryCards"></div>
+      </section>
+
+      <!-- Course filter pills -->
+      <section>
+        <div class="overflow-x-auto">
+          <div class="flex gap-2 min-w-max pb-1" id="filterPills"></div>
+        </div>
+      </section>
+
+      <!-- Calendar + Sidebar -->
+      <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Calendar (2/3 width) -->
+        <div class="lg:col-span-2 bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-3 border-b border-gray-700">
+            <button onclick="shiftMonth(-1)" class="p-1 text-gray-400 hover:text-indigo-300 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div class="flex items-center gap-3">
+              <h2 id="calTitle" class="text-sm font-semibold text-gray-100"></h2>
+              <button onclick="goToToday()" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors border border-indigo-800 px-2 py-0.5 rounded">Today</button>
+            </div>
+            <button onclick="shiftMonth(1)" class="p-1 text-gray-400 hover:text-indigo-300 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          <div class="grid grid-cols-7 border-b border-gray-700">
+            <div class="text-center text-xs text-gray-500 py-2">Sun</div>
+            <div class="text-center text-xs text-gray-500 py-2">Mon</div>
+            <div class="text-center text-xs text-gray-500 py-2">Tue</div>
+            <div class="text-center text-xs text-gray-500 py-2">Wed</div>
+            <div class="text-center text-xs text-gray-500 py-2">Thu</div>
+            <div class="text-center text-xs text-gray-500 py-2">Fri</div>
+            <div class="text-center text-xs text-gray-500 py-2">Sat</div>
+          </div>
+          <div id="calGrid" class="grid grid-cols-7"></div>
+        </div>
+
+        <!-- Sidebar (1/3 width) -->
+        <div class="bg-gray-900 rounded-xl border border-gray-700 flex flex-col">
+          <div class="px-4 py-3 border-b border-gray-700 flex-shrink-0">
+            <h2 class="text-sm font-semibold text-gray-200">Assignments</h2>
+          </div>
+          <div class="flex-1 overflow-y-auto max-h-[480px] divide-y divide-gray-800" id="upcomingList"></div>
+          <p id="noAssignmentsMsg" class="hidden text-gray-500 text-sm text-center py-6 px-4">No assignments — enjoy the break!</p>
+        </div>
+      </section>
+
+      <!-- Announcements -->
+      <section>
+        <h2 class="text-lg font-semibold text-gray-200 mb-4">Recent Announcements</h2>
+        <div id="announcementsList" class="space-y-3"></div>
+        <p id="noAnnouncementsMsg" class="hidden text-gray-500 text-sm">No recent announcements.</p>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    // ── XSS helper ────────────────────────────────────────────────────────
+    function escHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ── Urgency config ────────────────────────────────────────────────────
+    const URG = {
+      red:    { chipBg: '#3b0606', chipFg: '#fca5a5', border: 'border-l-red-500',    dot: 'bg-red-500',    label: 'Overdue'  },
+      yellow: { chipBg: '#3b2506', chipFg: '#fcd34d', border: 'border-l-yellow-500', dot: 'bg-yellow-400', label: 'Due soon' },
+      green:  { chipBg: '#063b1e', chipFg: '#86efac', border: 'border-l-green-500',  dot: 'bg-green-500',  label: 'Upcoming' },
+    };
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let allData = null;
+    let activeFilter = null; // null=all, else course_id (Number)
+    let calYear, calMonth;
+
+    // ── Filter helpers ────────────────────────────────────────────────────
+    function filteredAssignments() {
+      if (!allData) return [];
+      if (activeFilter === null) return allData.assignments;
+      return allData.assignments.filter(a => a.course_id === activeFilter);
+    }
+
+    function filteredAnnouncements() {
+      if (!allData) return [];
+      if (activeFilter === null) return allData.announcements;
+      return allData.announcements.filter(a => a.course_id === activeFilter);
+    }
+
+    // ── UI state ──────────────────────────────────────────────────────────
+    function showLoading() {
+      document.getElementById('skeleton').classList.remove('hidden');
+      document.getElementById('dashboard').classList.add('hidden');
+      document.getElementById('errorBanner').classList.add('hidden');
+      document.getElementById('refreshBtn').disabled = true;
+      document.getElementById('refreshIcon').classList.add('animate-spin');
+    }
+
+    function hideLoading() {
+      document.getElementById('skeleton').classList.add('hidden');
+      document.getElementById('refreshBtn').disabled = false;
+      document.getElementById('refreshIcon').classList.remove('animate-spin');
+    }
+
+    function showError(msg) {
+      document.getElementById('errorBanner').classList.remove('hidden');
+      document.getElementById('errorMsg').textContent = msg;
+    }
+
+    // ── Daily summary ─────────────────────────────────────────────────────
+    function renderDailySummary() {
+      const assignments = filteredAssignments();
+      const announcements = filteredAnnouncements();
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd   = new Date(todayStart.getTime() + 86400000);
+      const weekEnd    = new Date(todayStart.getTime() + 7 * 86400000);
+
+      let overdue = 0, dueToday = 0, thisWeek = 0;
+      for (const a of assignments) {
+        if (a.urgency === 'red') { overdue++; continue; }
+        if (!a.due_at) continue;
+        const d = new Date(a.due_at);
+        if (d >= todayStart && d < todayEnd) dueToday++;
+        else if (d >= todayEnd && d < weekEnd) thisWeek++;
+      }
+
+      const cards = [
+        { label: 'Overdue',       count: overdue,              bg: 'bg-red-950/50',    border: 'border-red-800',    text: 'text-red-400'    },
+        { label: 'Due Today',     count: dueToday,             bg: 'bg-yellow-950/50', border: 'border-yellow-800', text: 'text-yellow-400' },
+        { label: 'This Week',     count: thisWeek,             bg: 'bg-green-950/50',  border: 'border-green-800',  text: 'text-green-400'  },
+        { label: 'Announcements', count: announcements.length, bg: 'bg-indigo-950/50', border: 'border-indigo-800', text: 'text-indigo-400' },
+      ];
+
+      document.getElementById('summaryCards').innerHTML = cards.map(c => `
+        <div class="rounded-xl border ${c.border} ${c.bg} px-5 py-4">
+          <p class="text-2xl font-bold ${c.text}">${c.count}</p>
+          <p class="text-xs text-gray-400 mt-1">${c.label}</p>
+        </div>
+      `).join('');
+    }
+
+    // ── Course filter pills ───────────────────────────────────────────────
+    function renderCoursePills(courses) {
+      const allPill = `<button class="filter-pill px-3 py-1 rounded-full text-xs font-medium transition-colors bg-indigo-600 text-white"
+        onclick="applyFilter(null)" data-course-id="null">All Courses</button>`;
+      const coursePills = courses.map(c => `
+        <button class="filter-pill px-3 py-1 rounded-full text-xs font-medium transition-colors bg-gray-700 text-gray-300"
+          onclick="applyFilter(${c.id})" data-course-id="${c.id}">${escHtml(c.course_code)}</button>
+      `).join('');
+      document.getElementById('filterPills').innerHTML = allPill + coursePills;
+    }
+
+    function updateFilterPillUI() {
+      document.querySelectorAll('.filter-pill').forEach(btn => {
+        const id = btn.dataset.courseId;
+        const isActive = (activeFilter === null && id === 'null') ||
+                         (activeFilter !== null && Number(id) === activeFilter);
+        if (isActive) {
+          btn.classList.add('bg-indigo-600', 'text-white');
+          btn.classList.remove('bg-gray-700', 'text-gray-300');
+        } else {
+          btn.classList.remove('bg-indigo-600', 'text-white');
+          btn.classList.add('bg-gray-700', 'text-gray-300');
+        }
+      });
+    }
+
+    function applyFilter(courseId) {
+      activeFilter = courseId;
+      updateFilterPillUI();
+      renderDailySummary();
+      renderCalendar();
+      renderUpcomingList();
+      renderAnnouncements();
+    }
+
+    // ── Calendar ──────────────────────────────────────────────────────────
+    function buildDayMap(assignments) {
+      const map = {};
+      for (const a of assignments) {
+        if (!a.due_at) continue;
+        const d = new Date(a.due_at);
+        const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        if (!map[key]) map[key] = [];
+        map[key].push(a);
+      }
+      return map;
+    }
+
+    function shiftMonth(delta) {
+      calMonth += delta;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      if (calMonth < 0)  { calMonth = 11; calYear--; }
+      renderCalendar();
+    }
+
+    function goToToday() {
+      const now = new Date();
+      calYear  = now.getFullYear();
+      calMonth = now.getMonth();
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const MONTHS = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+      document.getElementById('calTitle').textContent = `${MONTHS[calMonth]} ${calYear}`;
+
+      const assignments = filteredAssignments();
+      const dayMap = buildDayMap(assignments);
+
+      const now = new Date();
+      const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const firstDow    = new Date(calYear, calMonth, 1).getDay();
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+      const totalCells  = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+
+      let html = '';
+      for (let i = 0; i < totalCells; i++) {
+        const dayNum = i - firstDow + 1;
+        const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
+        const isToday = inMonth && `${calYear}-${calMonth}-${dayNum}` === todayKey;
+        const isPast  = inMonth && new Date(calYear, calMonth, dayNum) < todayMidnight;
+
+        const key = `${calYear}-${calMonth}-${dayNum}`;
+        const dayItems = (inMonth && dayMap[key]) ? dayMap[key] : [];
+
+        const todayStyle = isToday ? 'background-color:rgb(30 27 75/0.3);' : '';
+
+        let dateNumHtml = '';
+        if (inMonth) {
+          if (isToday) {
+            dateNumHtml = `<span class="text-xs bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center leading-none">${dayNum}</span>`;
+          } else if (isPast) {
+            dateNumHtml = `<span class="text-xs text-gray-600">${dayNum}</span>`;
+          } else {
+            dateNumHtml = `<span class="text-xs text-gray-400">${dayNum}</span>`;
+          }
+        }
+
+        const MAX_CHIPS = 3;
+        const overflow = dayItems.length - MAX_CHIPS;
+        const chips = dayItems.slice(0, MAX_CHIPS).map(a => {
+          const urg = URG[a.urgency] || URG.green;
+          return `<span class="cal-chip" style="background:${urg.chipBg};color:${urg.chipFg}" title="${escHtml(a.name)}">${escHtml(a.name)}</span>`;
+        }).join('');
+        const overflowChip = overflow > 0
+          ? `<span class="cal-chip" style="background:#1f2937;color:#9ca3af">+${overflow} more</span>`
+          : '';
+
+        html += `
+          <div class="min-h-[80px] border-r border-b border-gray-800 p-1.5${!inMonth ? ' opacity-20' : ''}" style="${todayStyle}">
+            <div class="flex justify-end mb-1">${dateNumHtml}</div>
+            <div class="space-y-0.5">${chips}${overflowChip}</div>
+          </div>`;
+      }
+
+      document.getElementById('calGrid').innerHTML = html;
+    }
+
+    // ── Upcoming list (sidebar) ───────────────────────────────────────────
+    function renderUpcomingList() {
+      const list = document.getElementById('upcomingList');
+      const none = document.getElementById('noAssignmentsMsg');
+      const assignments = filteredAssignments();
+      list.innerHTML = '';
+
+      if (!assignments.length) {
+        none.classList.remove('hidden');
+        list.classList.add('hidden');
+        return;
+      }
+      none.classList.add('hidden');
+      list.classList.remove('hidden');
+
+      list.innerHTML = assignments.map(a => {
+        const urg = URG[a.urgency] || URG.green;
+        const pts = a.points_possible != null
+          ? `<span class="text-gray-600">${escHtml(a.points_possible)} pts</span>` : '';
+        const link = a.html_url ? `href="${escHtml(a.html_url)}" target="_blank" rel="noopener"` : '';
+        return `
+          <div class="px-4 py-3 border-l-2 ${urg.border} hover:bg-gray-800/50 transition-colors">
+            <p class="text-xs font-mono text-indigo-400 mb-0.5">${escHtml(a.course_code)}</p>
+            <p class="text-sm text-gray-100 leading-snug line-clamp-2 mb-1">
+              ${link ? `<a ${link} class="hover:text-indigo-300">${escHtml(a.name)}</a>` : escHtml(a.name)}
+            </p>
+            <div class="flex items-center gap-1.5 text-xs text-gray-500">
+              <span class="w-1.5 h-1.5 rounded-full ${urg.dot} flex-shrink-0"></span>
+              <span>${escHtml(a.due_fmt)}</span>
+              ${pts}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Announcements ─────────────────────────────────────────────────────
+    function renderAnnouncements() {
+      const list = document.getElementById('announcementsList');
+      const none = document.getElementById('noAnnouncementsMsg');
+      const announcements = filteredAnnouncements();
+      list.innerHTML = '';
+
+      if (!announcements.length) {
+        none.classList.remove('hidden');
+        return;
+      }
+      none.classList.add('hidden');
+
+      list.innerHTML = announcements.map(ann => {
+        const link = ann.html_url ? `href="${escHtml(ann.html_url)}" target="_blank" rel="noopener"` : '';
+        return `
+          <div class="rounded-xl bg-gray-800 border border-gray-700 px-5 py-4 hover:border-gray-500 transition-colors">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <span class="text-xs font-mono bg-indigo-900/60 text-indigo-300 px-2 py-0.5 rounded-full">${escHtml(ann.course_code)}</span>
+              <span class="text-xs text-gray-500">${escHtml(ann.posted_fmt)}</span>
+            </div>
+            <p class="text-sm font-semibold text-white mb-1">
+              ${link ? `<a ${link} class="hover:text-indigo-300 transition-colors">${escHtml(ann.title)}</a>` : escHtml(ann.title)}
+            </p>
+            ${ann.preview ? `<p class="text-xs text-gray-400 leading-relaxed line-clamp-3">${escHtml(ann.preview)}</p>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    // ── Main fetch ────────────────────────────────────────────────────────
+    async function fetchData() {
+      showLoading();
+      let data;
+      try {
+        const resp = await fetch('/api/data');
+        if (resp.redirected || !resp.headers.get('content-type')?.includes('application/json')) {
+          window.location.href = '/login';
+          return;
+        }
+        data = await resp.json();
+      } catch (err) {
+        showError('Could not reach the server: ' + err.message);
+        hideLoading();
+        return;
+      }
+
+      if (data.error) {
+        showError(data.error);
+        hideLoading();
+        return;
+      }
+
+      allData = data;
+
+      const now = new Date();
+      calYear  = now.getFullYear();
+      calMonth = now.getMonth();
+
+      if (data.generated_at) {
+        const ts = document.getElementById('ts');
+        ts.textContent = 'Updated ' + data.generated_at;
+        ts.classList.remove('hidden');
+      }
+
+      renderCoursePills(data.courses);
+      applyFilter(null);
+
+      document.getElementById('dashboard').classList.remove('hidden');
+      hideLoading();
+    }
+
+    fetchData();
+  </script>
+</body>
+</html>

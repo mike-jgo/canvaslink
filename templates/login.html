@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Canvas Dashboard — Sign in</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-950 text-white font-sans flex items-center justify-center px-4">
+
+  <div class="w-full max-w-md">
+
+    <!-- Logo / title -->
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold tracking-tight text-white">Canvas Dashboard</h1>
+      <p class="text-gray-500 text-sm mt-2">Sign in with your Canvas credentials</p>
+    </div>
+
+    <!-- Card -->
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl px-8 py-8 shadow-xl">
+
+      <!-- Error banner -->
+      {% if error %}
+      <div class="mb-6 rounded-xl border border-red-700 bg-red-950/60 px-4 py-3">
+        <p class="text-sm text-red-300">{{ error }}</p>
+      </div>
+      {% endif %}
+
+      <form method="POST" action="/login" class="space-y-5">
+
+        <!-- Canvas URL -->
+        <div>
+          <label for="canvas_url" class="block text-sm font-medium text-gray-300 mb-1.5">
+            Canvas URL
+          </label>
+          <input
+            id="canvas_url"
+            name="canvas_url"
+            type="url"
+            required
+            placeholder="https://school.instructure.com"
+            value="{{ prefill_url }}"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+          />
+        </div>
+
+        <!-- API Token -->
+        <div>
+          <label for="token" class="block text-sm font-medium text-gray-300 mb-1.5">
+            API Token
+          </label>
+          <input
+            id="token"
+            name="token"
+            type="password"
+            required
+            placeholder="Your Canvas access token"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+          />
+          <p class="text-xs text-gray-600 mt-2 leading-relaxed">
+            Generate at Canvas &rarr; Account &rarr; Settings &rarr; Approved Integrations &rarr; + New Access Token
+          </p>
+        </div>
+
+        <!-- Submit -->
+        <button
+          type="submit"
+          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold transition-colors mt-2"
+        >
+          Sign in
+        </button>
+
+      </form>
+    </div>
+
+    <!-- Footer note -->
+    <p class="text-center text-xs text-gray-700 mt-6">
+      Credentials are stored only in a signed session cookie and never saved server-side.
+    </p>
+
+  </div>
+
+</body>
+</html>
